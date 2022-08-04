@@ -1,0 +1,447 @@
+{
+    "description": "Zendesk Demo - Studio",
+    "states": [
+      {
+        "name": "Trigger",
+        "type": "trigger",
+        "transitions": [
+          {
+            "next": "set_variables",
+            "event": "incomingMessage"
+          },
+          {
+            "event": "incomingCall"
+          },
+          {
+            "event": "incomingConversationMessage"
+          },
+          {
+            "next": "Check_if_user_comment",
+            "event": "incomingRequest"
+          },
+          {
+            "event": "incomingParent"
+          }
+        ],
+        "properties": {
+          "offset": {
+            "x": 0,
+            "y": -80
+          }
+        }
+      },
+      {
+        "name": "Zendesk_API_call",
+        "type": "make-http-request",
+        "transitions": [
+          {
+            "next": "Zendesk_query_results",
+            "event": "success"
+          },
+          {
+            "event": "failed"
+          }
+        ],
+        "properties": {
+          "offset": {
+            "x": -150,
+            "y": 330
+          },
+          "method": "GET",
+          "content_type": "application/x-www-form-urlencoded;charset=utf-8",
+          "body": "",
+          "url": "https://{{flow.variables.basic_auth}}@{{flow.variables.zendesk_url}}/api/v2/search.json?query=type:ticket%20{{trigger.message.From}}%20status%3Csolved"
+        }
+      },
+      {
+        "name": "Create_a_new_ticket_new_user",
+        "type": "make-http-request",
+        "transitions": [
+          {
+            "next": "TicketConfirmation",
+            "event": "success"
+          },
+          {
+            "event": "failed"
+          }
+        ],
+        "properties": {
+          "offset": {
+            "x": -520,
+            "y": 1510
+          },
+          "method": "POST",
+          "content_type": "application/json;charset=utf-8",
+          "body": "{\"ticket\":{  \"subject\":\"New Message from {{trigger.message.From}}\",\n \"comment\":{\"body\":\"{{trigger.message.Body}} - {{trigger.message.From}}\"},\n \"tags\": [\"{{trigger.message.From}}\",\"sms_ticket\"],\n \"requester\": {\"name\":\"Text user: {{trigger.message.From}}\", \"phone\":\"{{trigger.message.From}}\"}\n   }}",
+          "url": "https://{{flow.variables.basic_auth}}@{{flow.variables.zendesk_url}}/api/v2/tickets.json"
+        }
+      },
+      {
+        "name": "Zendesk_query_results",
+        "type": "split-based-on",
+        "transitions": [
+          {
+            "event": "noMatch"
+          },
+          {
+            "next": "Search_user_by_phone",
+            "event": "match",
+            "conditions": [
+              {
+                "friendly_name": "No Results",
+                "arguments": [
+                  "{{widgets.Zendesk_API_call.parsed.results}}"
+                ],
+                "type": "is_blank",
+                "value": "Is Blank"
+              }
+            ]
+          },
+          {
+            "next": "Function_update_ticket",
+            "event": "match",
+            "conditions": [
+              {
+                "friendly_name": "Results Found",
+                "arguments": [
+                  "{{widgets.Zendesk_API_call.parsed.results}}"
+                ],
+                "type": "is_not_blank",
+                "value": "Is Not Blank"
+              }
+            ]
+          }
+        ],
+        "properties": {
+          "input": "{{widgets.Zendesk_API_call.parsed.results}}",
+          "offset": {
+            "x": -140,
+            "y": 560
+          }
+        }
+      },
+      {
+        "name": "set_variables",
+        "type": "set-variables",
+        "transitions": [
+          {
+            "next": "Zendesk_API_call",
+            "event": "next"
+          }
+        ],
+        "properties": {
+          "variables": [
+            {
+              "value": "BASIC_AUTH",
+              "key": "basic_auth"
+            },
+            {
+              "value": "ZENDESK_SUBDOMAIN",
+              "key": "zendesk_url"
+            }
+          ],
+          "offset": {
+            "x": 60,
+            "y": 110
+          }
+        }
+      },
+      {
+        "name": "TicketConfirmation",
+        "type": "send-message",
+        "transitions": [
+          {
+            "event": "sent"
+          },
+          {
+            "event": "failed"
+          }
+        ],
+        "properties": {
+          "offset": {
+            "x": -510,
+            "y": 1740
+          },
+          "service": "{{trigger.message.InstanceSid}}",
+          "channel": "{{trigger.message.ChannelSid}}",
+          "from": "{{flow.channel.address}}",
+          "to": "{{contact.channel.address}}",
+          "body": "Hi, we've re received your text \n and successfully created a ticket (ID: {{widgets.Create_a_new_ticket_new_user.parsed.ticket.id}}).\n One of our customer experience specialists will be with you as soon as possible!"
+        }
+      },
+      {
+        "name": "Function_update_ticket",
+        "type": "run-function",
+        "transitions": [
+          {
+            "next": "TicketUpdateConfirmation",
+            "event": "success"
+          },
+          {
+            "event": "fail"
+          }
+        ],
+        "properties": {
+          "service_sid": "ZSa9efe05cf5272f005781ea27f796a2ed",
+          "environment_sid": "ZE26096c13ecff0b4082d4b1c4a6a22570",
+          "offset": {
+            "x": 590,
+            "y": 850
+          },
+          "function_sid": "ZHef783f5bb37cd254830b30b14d668f57",
+          "parameters": [
+            {
+              "value": "{{trigger.message.From}}",
+              "key": "From"
+            },
+            {
+              "value": "{{trigger.message.Body}}",
+              "key": "Body"
+            },
+            {
+              "value": "{{widgets.Zendesk_API_call.parsed.results[0].id}}",
+              "key": "ticket_ID"
+            }
+          ],
+          "url": "https://zendesksend-8921.twil.io/update_ticket"
+        }
+      },
+      {
+        "name": "TicketUpdateConfirmation",
+        "type": "send-message",
+        "transitions": [
+          {
+            "event": "sent"
+          },
+          {
+            "event": "failed"
+          }
+        ],
+        "properties": {
+          "offset": {
+            "x": 610,
+            "y": 1110
+          },
+          "service": "{{trigger.message.InstanceSid}}",
+          "channel": "{{trigger.message.ChannelSid}}",
+          "from": "{{flow.channel.address}}",
+          "to": "{{contact.channel.address}}",
+          "body": "Hi, we've received your message and successfully updated your ticket (ID: {{widgets.Function_update_ticket.body}}). \nOne of our customer experience specialists will be with you as soon as possible!"
+        }
+      },
+      {
+        "name": "send_zendesk_update",
+        "type": "send-message",
+        "transitions": [
+          {
+            "event": "sent"
+          },
+          {
+            "event": "failed"
+          }
+        ],
+        "properties": {
+          "offset": {
+            "x": 930,
+            "y": 570
+          },
+          "service": "{{trigger.message.InstanceSid}}",
+          "channel": "{{trigger.message.ChannelSid}}",
+          "from": "{{flow.channel.address}}",
+          "to": "{{flow.data.phonenumber}}",
+          "body": "{{flow.data.agent}}: {{flow.data.comment}}"
+        }
+      },
+      {
+        "name": "Check_if_user_comment",
+        "type": "split-based-on",
+        "transitions": [
+          {
+            "event": "noMatch"
+          },
+          {
+            "next": "send_zendesk_update",
+            "event": "match",
+            "conditions": [
+              {
+                "friendly_name": "If value contains {{flow.data.phonenumber}}",
+                "arguments": [
+                  "{{flow.data.comment}}"
+                ],
+                "type": "does_not_contain",
+                "value": "{{flow.data.phonenumber}}"
+              }
+            ]
+          }
+        ],
+        "properties": {
+          "input": "{{flow.data.comment}}",
+          "offset": {
+            "x": 830,
+            "y": 190
+          }
+        }
+      },
+      {
+        "name": "Search_user_by_phone",
+        "type": "make-http-request",
+        "transitions": [
+          {
+            "next": "Check_if_user_exists",
+            "event": "success"
+          },
+          {
+            "event": "failed"
+          }
+        ],
+        "properties": {
+          "offset": {
+            "x": -410,
+            "y": 790
+          },
+          "method": "GET",
+          "content_type": "application/x-www-form-urlencoded;charset=utf-8",
+          "body": "",
+          "url": "https://{{flow.variables.basic_auth}}@{{flow.variables.zendesk_url}}/api/v2/users/search.json?query=phone:{{trigger.message.From| remove:\"+\"}}"
+        }
+      },
+      {
+        "name": "Check_if_user_exists",
+        "type": "split-based-on",
+        "transitions": [
+          {
+            "event": "noMatch"
+          },
+          {
+            "next": "Create_a_new_ticket_new_user",
+            "event": "match",
+            "conditions": [
+              {
+                "friendly_name": "No user found",
+                "arguments": [
+                  "{{widgets.Search_user_by_phone.parsed.count}}"
+                ],
+                "type": "equal_to",
+                "value": "0"
+              }
+            ]
+          },
+          {
+            "next": "Check_if_user_exists_has_email",
+            "event": "match",
+            "conditions": [
+              {
+                "friendly_name": "Found User",
+                "arguments": [
+                  "{{widgets.Search_user_by_phone.parsed.count}}"
+                ],
+                "type": "greater_than",
+                "value": "0"
+              }
+            ]
+          }
+        ],
+        "properties": {
+          "input": "{{widgets.Search_user_by_phone.parsed.count}}",
+          "offset": {
+            "x": -430,
+            "y": 950
+          }
+        }
+      },
+      {
+        "name": "Create_a_new_ticket_existing_user",
+        "type": "make-http-request",
+        "transitions": [
+          {
+            "next": "TicketConfirmation2",
+            "event": "success"
+          },
+          {
+            "event": "failed"
+          }
+        ],
+        "properties": {
+          "offset": {
+            "x": 350,
+            "y": 1490
+          },
+          "method": "POST",
+          "content_type": "application/json;charset=utf-8",
+          "body": "{\"ticket\":{  \"subject\":\"New Message from {{widgets.Search_user_by_phone.parsed.users[0].name}}\",\n \"comment\":{\"body\":\"{{trigger.message.Body}} - {{trigger.message.From}}\"},\n \"tags\": [\"{{trigger.message.From}}\"],\n \"requester\": {\"name\":\"{{widgets.Search_user_by_phone.parsed.users[0].name}}\",\"email\":\"{{widgets.Search_user_by_phone.parsed.users[0].email}}\"}\n   }}",
+          "url": "https://{{flow.variables.basic_auth}}@{{flow.variables.zendesk_url}}/api/v2/tickets.json"
+        }
+      },
+      {
+        "name": "TicketConfirmation2",
+        "type": "send-message",
+        "transitions": [
+          {
+            "event": "sent"
+          },
+          {
+            "event": "failed"
+          }
+        ],
+        "properties": {
+          "offset": {
+            "x": 360,
+            "y": 1750
+          },
+          "service": "{{trigger.message.InstanceSid}}",
+          "channel": "{{trigger.message.ChannelSid}}",
+          "from": "{{flow.channel.address}}",
+          "to": "{{contact.channel.address}}",
+          "body": "Hi, we've re received your text   and successfully created a ticket (ID: {{widgets.Create_a_new_ticket_existing_user.parsed.ticket.id}}). \nOne of our customer experience specialists will be with you as soon as possible!"
+        }
+      },
+      {
+        "name": "Check_if_user_exists_has_email",
+        "type": "split-based-on",
+        "transitions": [
+          {
+            "event": "noMatch"
+          },
+          {
+            "next": "Create_a_new_ticket_new_user",
+            "event": "match",
+            "conditions": [
+              {
+                "friendly_name": "User doesn't have an email",
+                "arguments": [
+                  "{{widgets.Search_user_by_phone.parsed.users[0].email}}"
+                ],
+                "type": "is_blank",
+                "value": "Is Blank"
+              }
+            ]
+          },
+          {
+            "next": "Create_a_new_ticket_existing_user",
+            "event": "match",
+            "conditions": [
+              {
+                "friendly_name": "User has a registered email",
+                "arguments": [
+                  "{{widgets.Search_user_by_phone.parsed.users[0].email}}"
+                ],
+                "type": "is_not_blank",
+                "value": "Is Not Blank"
+              }
+            ]
+          }
+        ],
+        "properties": {
+          "input": "{{widgets.Search_user_by_phone.parsed.users[0].email}}",
+          "offset": {
+            "x": -100,
+            "y": 1210
+          }
+        }
+      }
+    ],
+    "initial_state": "Trigger",
+    "flags": {
+      "allow_concurrent_calls": true
+    }
+  }
